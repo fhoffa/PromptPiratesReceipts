@@ -41,7 +41,12 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Expense Breakdown")
-    fig = px.pie(trip_data['expenses'], values='amount', names='category', hole=.3)
+    # Changed from pie chart to bar chart
+    fig = px.bar(trip_data['expenses'], x='category', y='amount', 
+                 title='Expenses by Category',
+                 labels={'amount': 'Amount Spent (€)', 'category': 'Category'},
+                 color='category')
+    fig.update_layout(showlegend=False)  # Hide legend as it's redundant for a bar chart
     st.plotly_chart(fig, use_container_width=True)
 
 # Favorite Foods
