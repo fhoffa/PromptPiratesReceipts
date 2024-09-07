@@ -8,6 +8,8 @@ import plotly.graph_objects as go
 
 from sqlalchemy import create_engine, text
 
+st.write("Available secrets:", list(st.secrets.keys()))
+
 # neon db postgres
 DB_URL = st.secrets.get("DB_URL") or os.environ.get("DB_URL")
 if not DB_URL:
