@@ -3,37 +3,58 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Take Picture with Back Camera</title>
+  <title>Take Picture with Adaptive Camera</title>
+  <style>
+    #response {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #f0f0f0;
+      border-radius: 5px;
+      display: none;
+    }
+  </style>
 </head>
 <body>
-  <h1>Take a picture with the back camera</h1>
-  
+  <h1>Take a picture</h1>
+
   <!-- Camera Video Feed -->
   <video id="video" autoplay></video>
-  
+
   <!-- Button to take picture -->
   <button id="takePhotoBtn">Take Picture</button>
-  
+
   <!-- Canvas to display captured image -->
   <canvas id="canvas" style="display:none;"></canvas>
-  
+
   <!-- Image Preview -->
   <img id="imagePreview" alt="Your Image" />
-  
+
   <!-- Button to send image -->
-  <button id="sendPhotoBtn" style="display:none;">Send to ChatGPT</button>
-  
+  <button id="sendPhotoBtn" style="display:none;">Send to Server</button>
+
+  <!-- Div to display response from server -->
+  <div id="response"></div>
+
   <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const imagePreview = document.getElementById('imagePreview');
     const takePhotoBtn = document.getElementById('takePhotoBtn');
     const sendPhotoBtn = document.getElementById('sendPhotoBtn');
-    
-    // Access user's back camera
+    const responseDiv = document.getElementById('response');
+
+    // Detect if the device is mobile
+    function isMobileDevice() {
+      return /Mobi|Android/i.test(navigator.userAgent);
+    }
+
+    // Set facingMode based on device type
+    let facingMode = isMobileDevice() ? { exact: "environment" } : "user";
+
+    // Access camera based on device type
     navigator.mediaDevices.getUserMedia({
       video: {
-        facingMode: { exact: "environment" }  // Use back camera
+        facingMode: facingMode
       }
     })
     .then(stream => {
@@ -41,9 +62,9 @@
     })
     .catch(err => {
       console.error('Error accessing camera: ', err);
-      alert('Could not access the back camera. Please ensure camera permissions are granted.');
+      alert('Could not access the camera. Please ensure camera permissions are granted.');
     });
-    
+
     takePhotoBtn.addEventListener('click', () => {
       // Capture image
       canvas.width = video.videoWidth;
@@ -54,24 +75,36 @@
       imagePreview.style.display = 'block';
       sendPhotoBtn.style.display = 'block';
     });
-    
+
     sendPhotoBtn.addEventListener('click', () => {
       const dataURL = canvas.toDataURL('image/png');
-      
-      // Send the image data to the server
+
+      // Send the image data and default prompt to the server
       fetch('/upload', {
         method: 'POST',
         body: JSON.stringify({ image: dataURL }),
         headers: {
           'Content-Type': 'application/json'
         }
-      }).then(response => response.json())
-        .then(data => {
-          console.log('Success:', data);
-        })
-        .catch(error => {
-          console.error('Error:', error);
-        });
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Success:', data);
+
+        // Show the response from the server
+        if (data.success) {
+          responseDiv.style.display = 'block';
+          responseDiv.innerHTML = `<strong>Claude's Response:</strong><br>${data.response}`;
+        } else {
+          responseDiv.style.display = 'block';
+          responseDiv.innerHTML = `<strong>Error:</strong><br>${data.error}`;
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        responseDiv.style.display = 'block';
+        responseDiv.innerHTML = `<strong>Error:</strong><br>${error.message}`;
+      });
     });
   </script>
 </body>
