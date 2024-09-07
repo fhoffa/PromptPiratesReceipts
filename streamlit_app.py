@@ -6,7 +6,11 @@ import plotly.graph_objects as go
 from sqlalchemy import create_engine, text
 
 # neon db postgres
-DB_URL = st.secrets["DB_URL"]
+DB_URL = st.secrets.get("DB_URL") or os.environ.get("DB_URL")
+if not DB_URL:
+    st.error("Database URL is not set. Please configure DB_URL in Streamlit secrets or as an environment variable.")
+    st.stop()
+    
 engine = create_engine(DB_URL)
 def run_query(query):
     with engine.connect() as conn:
