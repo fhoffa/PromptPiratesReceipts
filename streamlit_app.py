@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, text, exc
 import plotly.express as px
 import os
 from datetime import datetime, timedelta
+from geopy.geocoders import Nominatim
 
 # Assuming DB_URL is set in your Streamlit secrets
 DB_URL = st.secrets["DB_URL"]
@@ -34,6 +35,14 @@ def check_tables_exist():
         return True
     except exc.ProgrammingError:
         return False
+
+def geocode_address(address):
+    geolocator = Nominatim(user_agent="geoapiExercises")
+    location = geolocator.geocode(address)
+    if location:
+        return location.latitude, location.longitude
+    else:
+        return None, None
 
 st.title("Europe Trip Expense Tracker")
 
@@ -72,9 +81,9 @@ if tables_exist:
             description = st.text_input("Description")
             category = st.selectbox("Category", ["Food", "Accommodation", "Transportation", "Activities", "Other"])
             location = st.text_input("Location (Address)")
-            
+
             submit_button = st.form_submit_button("Add Expense")
-            
+
             if submit_button:
                 datetime_str = f"{date} {time}"
                 query = """
@@ -104,6 +113,12 @@ if tables_exist:
     expenses_df = run_query(expenses_query)
     expenses_df['datetime'] = pd.to_datetime(expenses_df['datetime'])
     st.dataframe(expenses_df)
+
+    # Display expenses on map
+    st.header("Expenses Map")
+    expenses_df['latitude'], expenses_df['longitude'] = zip(*expenses_df['location'].apply(geocode_address))
+    expenses_df = expenses_df.dropna(subset=['latitude', 'longitude'])
+    st.map(expenses_df)
 
     # Expense analysis
     st.header("Expense Analysis")
