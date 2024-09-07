@@ -7,11 +7,14 @@ from flask import Flask, request, jsonify
 from io import BytesIO
 from PIL import Image
 import boto3
+import logging
 
 app = Flask(__name__)
 
 # Initialize Amazon Bedrock client
 client = boto3.client('bedrock-runtime', region_name='us-west-2')  # Make sure to replace with your correct region
+
+prompt = 'Use english language for the results. Give me in a json format the date, cost, taxes, description, location (address), and category (like food, transportation, etc.) of the receipt.'
 
 # Route to serve the main HTML page
 @app.route('/')
@@ -20,16 +23,24 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_image():
+
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)  # Set logging level to INFO
+
+    # Example log statements
+    logger.info("Lambda function started")
+    logger.debug("Processing event data: %s", event) 
+
     data = request.get_json()
     if 'image' not in data:
-        return jsonify({'error': 'Image data not provided'}), 400
+        return jsonify({'error': 'No image data provided'}), 400
     
     image_data = data['image']
-    prompt = 'Use english language for the results. Give me in a json format the date, cost, taxes, description, location (address), and category (like food, transportation, etc.) of the receipt.'
 
     # Remove the "data:image/png;base64," part from the string
     image_data = image_data.replace('data:image/png;base64,', '')
     
+
     try:
         # Decode the base64 string to bytes
         image_bytes = base64.b64decode(image_data)
@@ -44,7 +55,9 @@ def upload_image():
         buffered = BytesIO()
         image.save(buffered, format="PNG")
         img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        
+
+        logger.info("Calling Claude")
+
         # Call to Claude model on Amazon Bedrock
         response = client.invoke_model(
             modelId="anthropic.claude-3-sonnet-20240229-v1:0",  # Use your Claude model version
@@ -60,9 +73,20 @@ def upload_image():
         result = response['body'].read().decode('utf-8')
         
         return jsonify({'success': True, 'message': 'Image processed', 'response': result})
-    
+
+    except boto3.exceptions.NoCredentialsError as e:
+        print("AWS credentials not found or invalid.")
+        return jsonify({'error': 'AWS credentials not found or invalid.'}), 500
+
+    except client.exceptions.ServiceError as e:
+        print(f"Amazon Bedrock service error: {e}")
+        return jsonify({'error': 'Amazon Bedrock service error.'}), 500
+
     except Exception as e:
+        print(f"An error occurred: {e}")
         return jsonify({'error': str(e)}), 500
+
+    logger.info("Lambda function finished")
 
 if __name__ == '__main__':
     app.run(debug=True)
