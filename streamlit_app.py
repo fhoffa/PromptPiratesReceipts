@@ -4,7 +4,6 @@ from sqlalchemy import create_engine, text, exc
 import plotly.express as px
 import os
 from datetime import datetime, timedelta
-from geopy.geocoders import Nominatim
 
 # Assuming DB_URL is set in your Streamlit secrets
 DB_URL = st.secrets["DB_URL"]
@@ -35,14 +34,6 @@ def check_tables_exist():
         return True
     except exc.ProgrammingError:
         return False
-
-def geocode_address(address):
-    geolocator = Nominatim(user_agent="geoapiExercises")
-    location = geolocator.geocode(address)
-    if location:
-        return location.latitude, location.longitude
-    else:
-        return None, None
 
 st.title("Europe Trip Expense Tracker")
 
@@ -81,14 +72,16 @@ if tables_exist:
             description = st.text_input("Description")
             category = st.selectbox("Category", ["Food", "Accommodation", "Transportation", "Activities", "Other"])
             location = st.text_input("Location (Address)")
+            latitude = st.text_input("Latitude")
+            longitude = st.text_input("Longitude")
 
             submit_button = st.form_submit_button("Add Expense")
 
             if submit_button:
                 datetime_str = f"{date} {time}"
                 query = """
-                INSERT INTO trip_expenses (user_id, price, datetime, description, category, location)
-                VALUES (:user_id, :price, :datetime, :description, :category, :location)
+                INSERT INTO trip_expenses (user_id, price, datetime, description, category, location, latitude, longitude)
+                VALUES (:user_id, :price, :datetime, :description, :category, :location, :latitude, :longitude)
                 """
                 try:
                     execute_query(query, {
@@ -97,7 +90,9 @@ if tables_exist:
                         "datetime": datetime_str,
                         "description": description,
                         "category": category,
-                        "location": location
+                        "location": location,
+                        "latitude": latitude,
+                        "longitude": longitude
                     })
                     st.success("Expense added successfully!")
                 except Exception as e:
@@ -106,7 +101,7 @@ if tables_exist:
     # Display expenses
     st.header("Trip Expenses")
     expenses_query = """
-    SELECT user_id, price, datetime, description, category, location 
+    SELECT user_id, price, datetime, description, category, location, latitude, longitude 
     FROM trip_expenses 
     ORDER BY datetime DESC
     """
@@ -114,11 +109,16 @@ if tables_exist:
     expenses_df['datetime'] = pd.to_datetime(expenses_df['datetime'])
     st.dataframe(expenses_df)
 
-    # Display expenses on map
-    st.header("Expenses Map")
-    expenses_df['latitude'], expenses_df['longitude'] = zip(*expenses_df['location'].apply(geocode_address))
-    expenses_df = expenses_df.dropna(subset=['latitude', 'longitude'])
-    st.map(expenses_df)
+    try:
+        expenses_map_df = {'latitude': [], 'longitude': []}
+        for row in expenses_df.itertuples():
+            if row.latitude is not None and row.longitude is not None:
+                expenses_map_df['latitude'].append(float(row.latitude))
+                expenses_map_df['longitude'].append(float(row.longitude))
+        st.header("Expenses Map")
+        st.map(expenses_map_df)
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
 
     # Expense analysis
     st.header("Expense Analysis")

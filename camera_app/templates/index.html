@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Take Picture with Adaptive Camera</title>
+    <title>GeoExpenses</title>
     <style>
         #response {
             margin-top: 20px;
@@ -13,14 +13,19 @@
             border-radius: 5px;
             display: none;
         }
+        video {
+            width: 300px;
+            height: auto;
+            background: black;
+        }
     </style>
 </head>
 
 <body>
-    <h1>Take a picture</h1>
+    <h1>GeoExpenses - Traveling finances under control</h1>
 
     <!-- Camera Video Feed -->
-    <video id="video" autoplay></video>
+    <video id="video" autoplay playsinline></video>  <!-- Added 'playsinline' for iOS compatibility -->
 
     <!-- Button to take picture -->
     <button id="takePhotoBtn">Take Picture</button>
@@ -74,6 +79,8 @@
             canvas.getContext('2d').drawImage(video, 0, 0);
             const dataURL = canvas.toDataURL('image/png');
             imagePreview.src = dataURL;
+            imagePreview.style.width = '300px';
+            imagePreview.style.height = 'auto';
             imagePreview.style.display = 'block';
             sendPhotoBtn.style.display = 'block';
         });
@@ -82,6 +89,7 @@
             const dataURL = canvas.toDataURL('image/png');
 
             // Send the image data to the server
+            // fetch('/dev/upload', {
             fetch('/upload', {
                 method: 'POST',
                 body: JSON.stringify({ image: dataURL }),
