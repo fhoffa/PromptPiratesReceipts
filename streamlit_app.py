@@ -13,9 +13,9 @@ def run_query(query):
     with engine.connect() as conn:
         return pd.read_sql(text(query), conn)
 
-def execute_query(query):
+def execute_query(query, params=None):
     with engine.connect() as conn:
-        conn.execute(text(query))
+        conn.execute(text(query), params)
         conn.commit()
 
 def read_sql_file(filename):
@@ -62,37 +62,37 @@ else:
 
 # Main content
 if tables_exist:
-    # Input form for new expense
-    st.header("Add New Expense")
-    with st.form("new_expense_form"):
-        user_id = st.text_input("User ID")
-        price = st.number_input("Price", min_value=0.01, step=0.01)
-        date = st.date_input("Date")
-        time = st.time_input("Time")
-        description = st.text_input("Description")
-        category = st.selectbox("Category", ["Food", "Accommodation", "Transportation", "Activities", "Other"])
-        location = st.text_input("Location (Address)")
-        
-        submit_button = st.form_submit_button("Add Expense")
-        
-        if submit_button:
-            datetime_str = f"{date} {time}"
-            query = text("""
-            INSERT INTO trip_expenses (user_id, price, datetime, description, category, location)
-            VALUES (:user_id, :price, :datetime, :description, :category, :location)
-            """)
-            try:
-                execute_query(query, {
-                    "user_id": user_id,
-                    "price": price,
-                    "datetime": datetime_str,
-                    "description": description,
-                    "category": category,
-                    "location": location
-                })
-                st.success("Expense added successfully!")
-            except Exception as e:
-                st.error(f"An error occurred: {e}")
+    # Collapsible input form for new expense
+    with st.expander("Add New Expense"):
+        with st.form("new_expense_form"):
+            user_id = st.text_input("User ID")
+            price = st.number_input("Price", min_value=0.01, step=0.01)
+            date = st.date_input("Date")
+            time = st.time_input("Time")
+            description = st.text_input("Description")
+            category = st.selectbox("Category", ["Food", "Accommodation", "Transportation", "Activities", "Other"])
+            location = st.text_input("Location (Address)")
+            
+            submit_button = st.form_submit_button("Add Expense")
+            
+            if submit_button:
+                datetime_str = f"{date} {time}"
+                query = """
+                INSERT INTO trip_expenses (user_id, price, datetime, description, category, location)
+                VALUES (:user_id, :price, :datetime, :description, :category, :location)
+                """
+                try:
+                    execute_query(query, {
+                        "user_id": user_id,
+                        "price": price,
+                        "datetime": datetime_str,
+                        "description": description,
+                        "category": category,
+                        "location": location
+                    })
+                    st.success("Expense added successfully!")
+                except Exception as e:
+                    st.error(f"An error occurred: {e}")
 
     # Display expenses
     st.header("Trip Expenses")
