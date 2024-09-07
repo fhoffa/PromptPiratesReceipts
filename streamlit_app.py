@@ -3,6 +3,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text, exc
 import plotly.express as px
 import os
+from datetime import datetime, timedelta
 
 # Assuming DB_URL is set in your Streamlit secrets
 DB_URL = st.secrets["DB_URL"]
@@ -22,33 +23,25 @@ def read_sql_file(filename):
         return file.read()
 
 def reset_database():
-    # Drop existing tables
-    execute_query("DROP TABLE IF EXISTS trip_expenses, places, favorite_foods;")
-    
-    # Create tables
     create_tables_sql = read_sql_file('create_tables.sql')
-    execute_query(create_tables_sql)
-    
-    # Seed data
     seed_data_sql = read_sql_file('seed_data.sql')
+    execute_query(create_tables_sql)
     execute_query(seed_data_sql)
 
 def check_tables_exist():
     try:
         run_query("SELECT 1 FROM trip_expenses LIMIT 1")
-        run_query("SELECT 1 FROM places LIMIT 1")
-        run_query("SELECT 1 FROM favorite_foods LIMIT 1")
         return True
     except exc.ProgrammingError:
         return False
 
-st.title("Europe Trip Data")
+st.title("Europe Trip Expense Tracker")
 
 # Check if tables exist
 tables_exist = check_tables_exist()
 
-# Admin Section
-st.sidebar.header("Admin Section")
+# Sidebar for database operations
+st.sidebar.header("Database Operations")
 if not tables_exist:
     st.sidebar.warning("Database tables do not exist. Please initialize the database.")
     if st.sidebar.button("Initialize Database"):
@@ -59,7 +52,7 @@ if not tables_exist:
         except Exception as e:
             st.sidebar.error(f"An error occurred: {e}")
 else:
-    if st.sidebar.button("Reset Database to Initial State"):
+    if st.sidebar.button("Reset Database"):
         if st.sidebar.button("Are you sure? This will delete all current data."):
             try:
                 reset_database()
@@ -69,36 +62,76 @@ else:
 
 # Main content
 if tables_exist:
-    # Expenses
+    # Input form for new expense
+    st.header("Add New Expense")
+    with st.form("new_expense_form"):
+        user_id = st.text_input("User ID")
+        price = st.number_input("Price", min_value=0.01, step=0.01)
+        date = st.date_input("Date")
+        time = st.time_input("Time")
+        description = st.text_input("Description")
+        category = st.selectbox("Category", ["Food", "Accommodation", "Transportation", "Activities", "Other"])
+        location = st.text_input("Location (Address)")
+        
+        submit_button = st.form_submit_button("Add Expense")
+        
+        if submit_button:
+            datetime_str = f"{date} {time}"
+            query = text("""
+            INSERT INTO trip_expenses (user_id, price, datetime, description, category, location)
+            VALUES (:user_id, :price, :datetime, :description, :category, :location)
+            """)
+            try:
+                execute_query(query, {
+                    "user_id": user_id,
+                    "price": price,
+                    "datetime": datetime_str,
+                    "description": description,
+                    "category": category,
+                    "location": location
+                })
+                st.success("Expense added successfully!")
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+
+    # Display expenses
     st.header("Trip Expenses")
-    expenses_query = "SELECT * FROM trip_expenses ORDER BY date"
+    expenses_query = """
+    SELECT user_id, price, datetime, description, category, location 
+    FROM trip_expenses 
+    ORDER BY datetime DESC
+    """
     expenses_df = run_query(expenses_query)
+    expenses_df['datetime'] = pd.to_datetime(expenses_df['datetime'])
     st.dataframe(expenses_df)
 
-    # Expense by type pie chart
-    st.subheader("Expenses by Type")
-    expense_by_type = expenses_df.groupby('expense_type')['amount'].sum().reset_index()
-    fig = px.pie(expense_by_type, values='amount', names='expense_type', title='Expense Distribution')
-    st.plotly_chart(fig)
+    # Expense analysis
+    st.header("Expense Analysis")
 
-    # Places visited
-    st.header("Places Visited")
-    places_query = "SELECT * FROM places"
-    places_df = run_query(places_query)
-    st.map(places_df)
-
-    # Bar chart of spending by place
-    fig = px.bar(places_df, x='name', y='spent', title='Spending by Place')
-    st.plotly_chart(fig)
-
-    # Favorite Foods
-    st.header("Favorite Foods")
-    foods_query = "SELECT * FROM favorite_foods"
-    foods_df = run_query(foods_query)
-    st.write(foods_df['food_name'].tolist())
-
-    # Total Spending
-    total_spent = expenses_df['amount'].sum()
+    # Total spending
+    total_spent = expenses_df['price'].sum()
     st.metric("Total Trip Expenses", f"€{total_spent:.2f}")
+
+    # Spending by category
+    category_expenses = expenses_df.groupby('category')['price'].sum().reset_index()
+    fig = px.pie(category_expenses, values='price', names='category', title='Expenses by Category')
+    st.plotly_chart(fig)
+
+    # Spending over time
+    expenses_df['date'] = expenses_df['datetime'].dt.date
+    daily_expenses = expenses_df.groupby('date')['price'].sum().reset_index()
+    fig = px.line(daily_expenses, x='date', y='price', title='Daily Expenses')
+    st.plotly_chart(fig)
+
+    # Top 5 most expensive items
+    st.subheader("Top 5 Most Expensive Items")
+    top_expenses = expenses_df.nlargest(5, 'price')
+    st.table(top_expenses[['description', 'price', 'category', 'datetime']])
+
+    # Expenses by user
+    user_expenses = expenses_df.groupby('user_id')['price'].sum().reset_index()
+    fig = px.bar(user_expenses, x='user_id', y='price', title='Expenses by User')
+    st.plotly_chart(fig)
+
 else:
-    st.info("Please initialize the database using the button in the sidebar to view the data.")
+    st.info("Please initialize the database using the button in the sidebar to view and add expenses.")
