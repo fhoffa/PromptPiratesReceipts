@@ -3,6 +3,16 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+from sqlalchemy import create_engine, text
+
+# neon db postgres
+DB_URL = st.secrets["DB_URL"]
+engine = create_engine(DB_URL)
+def run_query(query):
+    with engine.connect() as conn:
+        return pd.read_sql(text(query), conn)
+
+
 # Mock data - replace with your actual data
 trip_data = {
     'places': pd.DataFrame({
