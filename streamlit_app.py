@@ -30,10 +30,18 @@ st.subheader("Places Visited")
 fig = px.scatter_mapbox(trip_data['places'], 
                         lat="lat", 
                         lon="lon", 
-                        size="spent",
+                        size="spent",  # This determines the size of the markers
+                        color="spent",  # This colors the markers based on spending
                         hover_name="name", 
+                        hover_data={"spent": True, "lat": False, "lon": False},
                         zoom=3, 
-                        mapbox_style="open-street-map")
+                        mapbox_style="open-street-map",
+                        size_max=50,  # Maximum size of markers
+                        color_continuous_scale=px.colors.sequential.Viridis)
+
+fig.update_layout(mapbox_style="open-street-map")
+fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+
 st.plotly_chart(fig, use_container_width=True)
 
 # Expenses Breakdown
