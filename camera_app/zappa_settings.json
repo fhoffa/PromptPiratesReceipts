@@ -1,0 +1,17 @@
+{
+    "dev": {
+        "app_function": "app.app",
+        "aws_region": "us-west-2",
+        "exclude": [
+            "boto3",
+            "dateutil",
+            "botocore",
+            "s3transfer",
+            "concurrent"
+        ],
+        "profile_name": "default",
+        "project_name": "camera-app",
+        "runtime": "python3.12",
+        "s3_bucket": "zappa-2lzafw0xt"
+    }
+}
