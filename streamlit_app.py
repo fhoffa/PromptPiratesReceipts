@@ -1,74 +1,104 @@
 import streamlit as st
 import pandas as pd
+from sqlalchemy import create_engine, text, exc
 import plotly.express as px
-import plotly.graph_objects as go
+import os
 
-# Mock data - replace with your actual data
-trip_data = {
-    'places': pd.DataFrame({
-        'name': ['Paris', 'Rome', 'Barcelona', 'Amsterdam'],
-        'lat': [48.8566, 41.9028, 41.3851, 52.3676],
-        'lon': [2.3522, 12.4964, 2.1734, 4.9041],
-        'spent': [1500, 1200, 1000, 800]
-    }),
-    'favorite_foods': ['Croissant', 'Pizza', 'Paella', 'Stroopwafel'],
-    'expenses': pd.DataFrame({
-        'category': ['Food', 'Hotels', 'Transportation', 'Activities'],
-        'amount': [1500, 2000, 800, 700]
-    }),
-    'tips': 250,
-    'servicio': 150,
-    'hotel_charges': 2000
-}
+# Assuming DB_URL is set in your Streamlit secrets
+DB_URL = st.secrets["DB_URL"]
+engine = create_engine(DB_URL)
 
-st.set_page_config(layout="wide")
+def run_query(query):
+    with engine.connect() as conn:
+        return pd.read_sql(text(query), conn)
 
-st.title("Europe Trip Dashboard")
+def execute_query(query):
+    with engine.connect() as conn:
+        conn.execute(text(query))
+        conn.commit()
 
-# Places Visited Map
-st.subheader("Places Visited")
-fig = px.scatter_mapbox(trip_data['places'], 
-                        lat="lat", 
-                        lon="lon", 
-                        size="spent",
-                        hover_name="name", 
-                        zoom=3, 
-                        mapbox_style="open-street-map")
-st.plotly_chart(fig, use_container_width=True)
+def read_sql_file(filename):
+    with open(os.path.join('database', filename), 'r') as file:
+        return file.read()
 
-# Expenses Breakdown
-col1, col2 = st.columns(2)
+def reset_database():
+    # Drop existing tables
+    execute_query("DROP TABLE IF EXISTS trip_expenses, places, favorite_foods;")
+    
+    # Create tables
+    create_tables_sql = read_sql_file('create_tables.sql')
+    execute_query(create_tables_sql)
+    
+    # Seed data
+    seed_data_sql = read_sql_file('seed_data.sql')
+    execute_query(seed_data_sql)
 
-with col1:
-    st.subheader("Expense Breakdown")
-    fig = px.pie(trip_data['expenses'], values='amount', names='category', hole=.3)
-    st.plotly_chart(fig, use_container_width=True)
+def check_tables_exist():
+    try:
+        run_query("SELECT 1 FROM trip_expenses LIMIT 1")
+        run_query("SELECT 1 FROM places LIMIT 1")
+        run_query("SELECT 1 FROM favorite_foods LIMIT 1")
+        return True
+    except exc.ProgrammingError:
+        return False
 
-# Favorite Foods
-with col2:
-    st.subheader("Favorite Foods")
-    for food in trip_data['favorite_foods']:
-        st.write(f"- {food}")
+st.title("Europe Trip Data")
 
-# Additional Expenses
-st.subheader("Additional Expenses")
-additional_expenses = pd.DataFrame({
-    'category': ['Tips', 'Servicio', 'Hotel Charges'],
-    'amount': [trip_data['tips'], trip_data['servicio'], trip_data['hotel_charges']]
-})
-fig = px.bar(additional_expenses, x='category', y='amount')
-st.plotly_chart(fig, use_container_width=True)
+# Check if tables exist
+tables_exist = check_tables_exist()
 
-# Total Spent
-total_spent = trip_data['expenses']['amount'].sum() + trip_data['tips'] + trip_data['servicio']
-st.metric("Total Spent", f"€{total_spent}")
+# Admin Section
+st.sidebar.header("Admin Section")
+if not tables_exist:
+    st.sidebar.warning("Database tables do not exist. Please initialize the database.")
+    if st.sidebar.button("Initialize Database"):
+        try:
+            reset_database()
+            st.sidebar.success("Database initialized successfully!")
+            tables_exist = True
+        except Exception as e:
+            st.sidebar.error(f"An error occurred: {e}")
+else:
+    if st.sidebar.button("Reset Database to Initial State"):
+        if st.sidebar.button("Are you sure? This will delete all current data."):
+            try:
+                reset_database()
+                st.sidebar.success("Database reset successfully!")
+            except Exception as e:
+                st.sidebar.error(f"An error occurred: {e}")
 
-# Data Tables
-st.subheader("Detailed Data")
-tab1, tab2 = st.tabs(["Places", "Expenses"])
+# Main content
+if tables_exist:
+    # Expenses
+    st.header("Trip Expenses")
+    expenses_query = "SELECT * FROM trip_expenses ORDER BY date"
+    expenses_df = run_query(expenses_query)
+    st.dataframe(expenses_df)
 
-with tab1:
-    st.dataframe(trip_data['places'])
+    # Expense by type pie chart
+    st.subheader("Expenses by Type")
+    expense_by_type = expenses_df.groupby('expense_type')['amount'].sum().reset_index()
+    fig = px.pie(expense_by_type, values='amount', names='expense_type', title='Expense Distribution')
+    st.plotly_chart(fig)
 
-with tab2:
-    st.dataframe(trip_data['expenses'])
+    # Places visited
+    st.header("Places Visited")
+    places_query = "SELECT * FROM places"
+    places_df = run_query(places_query)
+    st.map(places_df)
+
+    # Bar chart of spending by place
+    fig = px.bar(places_df, x='name', y='spent', title='Spending by Place')
+    st.plotly_chart(fig)
+
+    # Favorite Foods
+    st.header("Favorite Foods")
+    foods_query = "SELECT * FROM favorite_foods"
+    foods_df = run_query(foods_query)
+    st.write(foods_df['food_name'].tolist())
+
+    # Total Spending
+    total_spent = expenses_df['amount'].sum()
+    st.metric("Total Trip Expenses", f"€{total_spent:.2f}")
+else:
+    st.info("Please initialize the database using the button in the sidebar to view the data.")
