@@ -114,7 +114,7 @@ if tables_exist:
 
     # Spending by category
     category_expenses = expenses_df.groupby('category')['price'].sum().reset_index()
-    fig = px.pie(category_expenses, values='price', names='category', title='Expenses by Category')
+    fig = px.bar(category_expenses, y='category', x='price', title='Expenses by Category', orientation='h')
     st.plotly_chart(fig)
 
     # Spending over time
