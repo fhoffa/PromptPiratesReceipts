@@ -1,104 +1,80 @@
-import os
-
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-
-
 from sqlalchemy import create_engine, text
+import plotly.express as px
+import os
 
-# neon db postgres
-DB_URL = st.secrets.get("DB_URL") or os.environ.get("DB_URL")
-if not DB_URL:
-    st.error("Database URL is not set. Please configure DB_URL in Streamlit secrets or as an environment variable.")
-    st.stop()
-    
+# Assuming DB_URL is set in your Streamlit secrets
+DB_URL = st.secrets["DB_URL"]
 engine = create_engine(DB_URL)
+
 def run_query(query):
     with engine.connect() as conn:
         return pd.read_sql(text(query), conn)
 
+def execute_query(query):
+    with engine.connect() as conn:
+        conn.execute(text(query))
+        conn.commit()
 
-# Mock data - replace with your actual data
-trip_data = {
-    'places': pd.DataFrame({
-        'name': ['Paris', 'Rome', 'Barcelona', 'Amsterdam'],
-        'lat': [48.8566, 41.9028, 41.3851, 52.3676],
-        'lon': [2.3522, 12.4964, 2.1734, 4.9041],
-        'spent': [1500, 1200, 1000, 800]
-    }),
-    'favorite_foods': ['Croissant', 'Pizza', 'Paella', 'Stroopwafel'],
-    'expenses': pd.DataFrame({
-        'category': ['Food', 'Hotels', 'Transportation', 'Activities'],
-        'amount': [1500, 2000, 800, 700]
-    }),
-    'tips': 250,
-    'servicio': 150,
-    'hotel_charges': 2000
-}
+def read_sql_file(filename):
+    with open(os.path.join('database', filename), 'r') as file:
+        return file.read()
 
-st.set_page_config(layout="wide")
+def reset_database():
+    # Drop existing tables
+    execute_query("DROP TABLE IF EXISTS trip_expenses, places, favorite_foods;")
+    
+    # Create tables
+    create_tables_sql = read_sql_file('create_tables.sql')
+    execute_query(create_tables_sql)
+    
+    # Seed data
+    seed_data_sql = read_sql_file('seed_data.sql')
+    execute_query(seed_data_sql)
 
-st.title("Europe Trip Dashboard")
+st.title("Europe Trip Data")
 
-# Places Visited Map
-st.subheader("Places Visited")
-fig = px.scatter_mapbox(trip_data['places'], 
-                        lat="lat", 
-                        lon="lon", 
-                        size="spent",  # This determines the size of the markers
-                        color="spent",  # This colors the markers based on spending
-                        hover_name="name", 
-                        hover_data={"spent": True, "lat": False, "lon": False},
-                        zoom=3, 
-                        mapbox_style="open-street-map",
-                        size_max=50,  # Maximum size of markers
-                        color_continuous_scale=px.colors.sequential.Viridis)
+# Admin Section
+st.sidebar.header("Admin Section")
+if st.sidebar.button("Reset Database to Initial State"):
+    if st.sidebar.button("Are you sure? This will delete all current data."):
+        try:
+            reset_database()
+            st.sidebar.success("Database reset successfully!")
+        except Exception as e:
+            st.sidebar.error(f"An error occurred: {e}")
 
-fig.update_layout(mapbox_style="open-street-map")
-fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+# Rest of your Streamlit app code...
 
-st.plotly_chart(fig, use_container_width=True)
+# Expenses
+st.header("Trip Expenses")
+expenses_query = "SELECT * FROM trip_expenses ORDER BY date"
+expenses_df = run_query(expenses_query)
+st.dataframe(expenses_df)
 
-# Expenses Breakdown
-col1, col2 = st.columns(2)
+# Expense by type pie chart
+st.subheader("Expenses by Type")
+expense_by_type = expenses_df.groupby('expense_type')['amount'].sum().reset_index()
+fig = px.pie(expense_by_type, values='amount', names='expense_type', title='Expense Distribution')
+st.plotly_chart(fig)
 
-with col1:
-    st.subheader("Expense Breakdown")
-    # Changed from pie chart to bar chart
-    fig = px.bar(trip_data['expenses'], x='category', y='amount', 
-                 title='Expenses by Category',
-                 labels={'amount': 'Amount Spent (€)', 'category': 'Category'},
-                 color='category')
-    fig.update_layout(showlegend=False)  # Hide legend as it's redundant for a bar chart
-    st.plotly_chart(fig, use_container_width=True)
+# Places visited
+st.header("Places Visited")
+places_query = "SELECT * FROM places"
+places_df = run_query(places_query)
+st.map(places_df)
+
+# Bar chart of spending by place
+fig = px.bar(places_df, x='name', y='spent', title='Spending by Place')
+st.plotly_chart(fig)
 
 # Favorite Foods
-with col2:
-    st.subheader("Favorite Foods")
-    for food in trip_data['favorite_foods']:
-        st.write(f"- {food}")
+st.header("Favorite Foods")
+foods_query = "SELECT * FROM favorite_foods"
+foods_df = run_query(foods_query)
+st.write(foods_df['food_name'].tolist())
 
-# Additional Expenses
-st.subheader("Additional Expenses")
-additional_expenses = pd.DataFrame({
-    'category': ['Tips', 'Servicio', 'Hotel Charges'],
-    'amount': [trip_data['tips'], trip_data['servicio'], trip_data['hotel_charges']]
-})
-fig = px.bar(additional_expenses, x='category', y='amount')
-st.plotly_chart(fig, use_container_width=True)
-
-# Total Spent
-total_spent = trip_data['expenses']['amount'].sum() + trip_data['tips'] + trip_data['servicio']
-st.metric("Total Spent", f"€{total_spent}")
-
-# Data Tables
-st.subheader("Detailed Data")
-tab1, tab2 = st.tabs(["Places", "Expenses"])
-
-with tab1:
-    st.dataframe(trip_data['places'])
-
-with tab2:
-    st.dataframe(trip_data['expenses'])
+# Total Spending
+total_spent = expenses_df['amount'].sum()
+st.metric("Total Trip Expenses", f"€{total_spent:.2f}")
